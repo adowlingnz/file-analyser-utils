@@ -3,3 +3,13 @@ name = "file-analyser-utils"
 version = "0.1.0"
 description = "Workspace for CSV and Parquet analysers"
 requires-python = ">=3.13"
+
+dependencies = [
+    "pyarrow"
+]
+
+[tool.uv.workspace]
+members = [
+    "csv",
+    "parquet"
+]
