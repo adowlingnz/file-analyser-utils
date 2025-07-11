@@ -1,0 +1,21 @@
+[project]
+name = "csv-analyser"
+version = "0.1.0"
+description = "A command-line utility to count lines and analyse field consistency in large CSV files."
+authors = [
+    { name = "Anthony Dowling" }
+]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+csv-analyser = "csv_analyser:main"
+
+[tool.uv]
+# UV-specific options can go here (currently minimal config is needed)
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
