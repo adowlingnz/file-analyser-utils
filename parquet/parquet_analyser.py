@@ -2,6 +2,8 @@ import argparse
 from collections import defaultdict
 import json
 import tomllib  # Built-in from Python 3.11+
+import pandas as pd
+import numpy as np
 from pathlib import Path
 import pyarrow.parquet as pq
 import time
@@ -21,15 +23,26 @@ def get_project_metadata(pyproject_path="pyproject.toml"):
 def load_and_describe_parquet(file_path):
     """Load a Parquet file and print its details, row count, and schema overview."""
     print("Loading Parquet file...\n")
+    print(f"  File: {file_path}\n")
     table = pq.read_table(file_path)
     schema = table.schema
     num_columns = len(schema.names)
     num_rows = table.num_rows
 
-    print(f"Schema: {num_columns} columns, {num_rows:,} rows")
-    print("\nField Overview:\n")
+    # Get Parquet file metadata
+    parquet_file = pq.ParquetFile(file_path)
+    metadata = parquet_file.metadata
+    created_by = metadata.created_by if hasattr(metadata, "created_by") else "Unknown"
+    format_version = f"{metadata.format_version}" if hasattr(metadata, "format_version") else "Unknown"
+    # Parquet v1 files have format_version == 1.0, v2 files have 2.0
+    version_str = "v2" if "2" in format_version else "v1"
+
+    print(f"  Schema: {num_columns} columns, {num_rows:,} rows")
+    print(f"  Writer library: {created_by}")
+    print(f"  Parquet format version: {format_version} ({version_str})")
+    print("\n  Field Overview:\n")
     for i, field in enumerate(schema):
-        print(f"  {i+1}. {field.name} ({field.type})")
+        print(f"    {i+1}. {field.name} ({field.type})")
     print()
     return table, schema, num_columns, num_rows
 
@@ -190,6 +203,102 @@ def show_row_with_context(file_path, row_number, context=5):
         print(f"{prefix}Row {start + i + 1:,}: {row}{suffix}")
 
 
+def schemas_equal(schema1, schema2):
+    """Deeply compare two pyarrow schemas for field names and types, logging mismatches."""
+    if len(schema1) != len(schema2):
+        print(f"Schema length mismatch: {len(schema1)} vs {len(schema2)}")
+        return False
+    match = True
+    for idx, (f1, f2) in enumerate(zip(schema1, schema2), 1):
+        if f1.name != f2.name:
+            print(f"  Field {idx} name mismatch: '{f1.name}' vs '{f2.name}'")
+            match = False
+        if f1.type != f2.type:
+            print(f"  Field {idx} type mismatch for '{f1.name}': {f1.type} vs {f2.type}")
+            match = False
+    return match
+
+
+def dataframe_equal_fuzzy(df1, df2, rtol=1e-6, atol=1e-8):
+    if not df1.columns.equals(df2.columns):
+        print("  Column order or names differ.")
+        return False
+
+    differences = {}
+    for col in df1.columns:
+        s1 = df1[col]
+        s2 = df2[col]
+
+        # Align dtypes for numeric comparison
+        if pd.api.types.is_numeric_dtype(s1) and pd.api.types.is_numeric_dtype(s2):
+            try:
+                s1f = pd.to_numeric(s1, errors='coerce')
+                s2f = pd.to_numeric(s2, errors='coerce')
+                if not np.allclose(s1f, s2f, rtol=rtol, atol=atol, equal_nan=True):
+                    differences[col] = (s1f != s2f).sum()
+            except Exception:
+                differences[col] = "Coercion failed"
+        else:
+            if not s1.equals(s2):
+                differences[col] = (s1 != s2).sum()
+
+    if differences:
+        print("  Differences found in columns:")
+        for col, count in differences.items():
+            print(f"    {col}: {count} differing rows")
+        return False
+    return True
+
+
+def compare_parquet_files(file1, file2, check_schema=True, check_data=True, fuzzy_data=True, rtol=1e-6, atol=1e-8):
+    """
+    Compare two Parquet files for equality.
+    :param file1: Path to first Parquet file.
+    :param file2: Path to second Parquet file.
+    :param check_schema: If True, compare schemas.
+    :param check_data: If True, compare data content.
+    :param fuzzy_data: If True, use fuzzy comparison for numeric columns.
+    :param rtol: Relative tolerance for numeric comparison.
+    :param atol: Absolute tolerance for numeric comparison.
+    """
+    print(f"Comparing '{file1}' and '{file2}'...\n")
+    table1, schema1, num_columns1, num_rows1 = load_and_describe_parquet(file1)
+    table2, schema2, num_columns2, num_rows2 = load_and_describe_parquet(file2)
+
+    same_shape = (num_columns1 == num_columns2) and (num_rows1 == num_rows2)
+
+    if check_schema:
+        print("Checking schema...\n")
+
+        same_schema = schemas_equal(schema1, schema2)
+
+        print(f"\n  Schemas {'match' if same_schema else 'do NOT match'}.\n")
+
+    if not same_shape:
+        print(f"  Shape mismatch: {num_columns1}x{num_rows1} vs {num_columns2}x{num_rows2}")
+        print("Files are NOT identical.")
+        return False
+
+    if check_data:
+        print("Checking data...\n")
+        df1 = table1.to_pandas()
+        df2 = table2.to_pandas()
+        if fuzzy_data:
+            result = dataframe_equal_fuzzy(df1, df2, rtol=rtol, atol=atol)
+        else:
+            result = df1.equals(df2)
+            if not result:
+                print("  Exact data comparison failed.")
+    else:
+        result = same_schema and same_shape
+
+    if result:
+        print("\nFiles are IDENTICAL.")
+    else:
+        print("\nFiles are NOT identical.")
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description="Parquet File Analysis Utility")
     parser.add_argument("file", help="Path to the Parquet file")
@@ -202,6 +311,7 @@ def main():
     parser.add_argument("--print-malformed-data", action="store_true", help="Print actual data of malformed rows")
     parser.add_argument("--check-duplicates", type=int, help="Check for duplicate rows based on first N columns")
     parser.add_argument("--find", type=str, help="Find rows matching column values (JSON string)")
+    parser.add_argument("--compare", type=str, metavar="SECOND_FILE", help="Compare the main file to a second file")
 
     args = parser.parse_args()
 
@@ -211,7 +321,9 @@ def main():
     print("Runtime Configuration:")
     print(f"  File: {args.file}")
 
-    if args.find:
+    if args.compare:
+        print(f"  Mode: Compare ({args.file} vs {args.compare})")
+    elif args.find:
         print(f"  Mode: Find ({args.find})")
     elif args.row:
         print(f"  Mode: Row ({args.row} ± {args.context} records)")
@@ -234,7 +346,9 @@ def main():
 
     start = time.time()
 
-    if args.find:
+    if args.compare:
+        compare_parquet_files(args.file, args.compare)
+    elif args.find:
         try:
             column_values = json.loads(args.find)
             find_rows_by_column_values(args.file, column_values)
