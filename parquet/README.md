@@ -1,6 +1,6 @@
 # Parquet Analyser Utility
 
-A command-line utility for analysing Parquet files, providing schema overview, row statistics, duplicate detection, and advanced row search features.
+A command-line utility for analysing Parquet files, providing schema overview, row statistics, duplicate detection, advanced row search, and file comparison features.
 
 ## Features
 
@@ -12,11 +12,14 @@ A command-line utility for analysing Parquet files, providing schema overview, r
 - Detect duplicate rows based on leading columns
 - Display top, tail, or specific rows with context
 - Search for rows matching specific column values
+- **Compare two Parquet files for schema and data equality**
 
 ## Requirements
 
 - Python 3.13+
 - [pyarrow](https://pypi.org/project/pyarrow/)
+- [pandas](https://pypi.org/project/pandas/)
+- [numpy](https://pypi.org/project/numpy/)
 - [uv](https://github.com/astral-sh/uv) (optional, for environment management)
 
 ## Usage
@@ -54,6 +57,9 @@ python parquet_analyser.py <file> [options]
 - `--find '{"col1": value1, "col2": value2, ...}'`  
   Find and print rows matching the specified column values (pass as a JSON string).
 
+- `--compare SECOND_FILE`  
+  Compare the main file to a second Parquet file for schema and data equality.
+
 ### Examples
 
 **Show schema and field overview:**
@@ -84,6 +90,11 @@ python parquet_analyser.py data.parquet --analyse --check-duplicates 3
 **Find rows where x=7843.75, y=101.25, z=25:**
 ```sh
 python parquet_analyser.py data.parquet --find '{"x":7843.75,"y":101.25,"z":25}'
+```
+
+**Compare two Parquet files for schema and data equality:**
+```sh
+python parquet_analyser.py file1.parquet --compare file2.parquet
 ```
 
 ## License
