@@ -1,14 +1,16 @@
 [project]
 name = "csv-analyser"
 version = "0.1.0"
-description = "A command-line utility to count lines and analyse field consistency in large CSV files."
+description = "A command-line utility to analyse large CSV files."
 authors = [
     { name = "Anthony Dowling" }
 ]
 license = "MIT"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "pandas"
+]
 
 [project.scripts]
 csv-analyser = "csv_analyser:main"
