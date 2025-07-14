@@ -1,6 +1,7 @@
 import csv
 import argparse
 from collections import defaultdict
+import json
 import tomllib  # Built-in from Python 3.11+
 import pandas as pd
 from pathlib import Path
@@ -33,6 +34,44 @@ def load_and_describe_csv(file_path):
         print(f"    {i+1}. {col} ({df[col].dtype})")
     print()
     return df, num_columns, num_rows
+
+
+def find_rows_by_column_values(file_path, column_values, raw=False):
+    """
+    Search for rows where the specified columns match the given values.
+    If raw=True, search for the raw string in the CSV file.
+    :param file_path: Path to the CSV file.
+    :param column_values: Dict of {column_name: value} to match, or a raw string if raw=True.
+    :param raw: If True, search for the raw string in the CSV file.
+    """
+    if raw:
+        # If column_values is a dict, convert to a search string
+        if isinstance(column_values, dict):
+            search_str = ','.join(str(v) for v in column_values.values())
+        else:
+            search_str = str(column_values)
+        print(f"\nSearching for raw string '{search_str}' in {file_path}...\n")
+        matches = []
+        with open(file_path, 'r', encoding='utf-8', newline='') as f:
+            for idx, line in enumerate(f, start=1):
+                if search_str in line:
+                    print(f"Row {idx:,}: {line.rstrip()}\n")
+                    matches.append(idx)
+        if matches:
+            print(f"\nFound {len(matches):,} matching row(s).")
+        else:
+            print("No matching rows found.")
+    else:
+        df = pd.read_csv(file_path)
+        columns = list(column_values.keys())
+        print(f"\nSearching for rows where {column_values}...\n")
+        matches = df.loc[(df[columns] == pd.Series(column_values)).all(axis=1)]
+        if matches.empty:
+            print("No matching rows found.")
+        else:
+            for idx, row in matches.iterrows():
+                print(f"Row {idx + 1:,}: {row.to_dict()}\n")
+            print(f"\nFound {len(matches):,} matching row(s).")
 
 
 def show_records(file_path, count, tail=False, raw=False):
@@ -123,6 +162,56 @@ def analyse_csv(file_path, delimiter=',', skip_header=False):
         print("\nAll lines have consistent field counts.")
 
 
+def compare_csv_files(file1, file2, check_header=True, check_data=True):
+    """
+    Compare two CSV files for equality.
+    :param file1: Path to first CSV file.
+    :param file2: Path to second CSV file.
+    :param check_header: If True, compare column headers.
+    :param check_data: If True, compare data content.
+    """
+    print(f"Comparing '{file1}' and '{file2}'...\n")
+    df1 = pd.read_csv(file1)
+    df2 = pd.read_csv(file2)
+
+    same_shape = df1.shape == df2.shape
+
+    if check_header:
+        print("Checking column headers...\n")
+        if list(df1.columns) == list(df2.columns):
+            print("  Headers match.\n")
+            same_header = True
+        else:
+            print("  Headers do NOT match.\n")
+            print(f"  File1 columns: {list(df1.columns)}")
+            print(f"  File2 columns: {list(df2.columns)}")
+            same_header = False
+    else:
+        same_header = True
+
+    if not same_shape:
+        print(f"  Shape mismatch: {df1.shape} vs {df2.shape}")
+        print("Files are NOT identical.")
+        return False
+
+    if check_data:
+        print("Checking data...\n")
+        if df1.equals(df2):
+            print("  Data matches.")
+            result = True
+        else:
+            print("  Data does NOT match.")
+            result = False
+    else:
+        result = same_header and same_shape
+
+    if result:
+        print("\nFiles are IDENTICAL.")
+    else:
+        print("\nFiles are NOT identical.")
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description="CSV File Analysis Utility")
     parser.add_argument("file", help="Path to the CSV file")
@@ -130,7 +219,16 @@ def main():
     parser.add_argument("--tail", type=int, help="Show the last N records")
     parser.add_argument("--row", type=int, help="Show a specific row and N either side")
     parser.add_argument("--context", type=int, default=5, help="Number of rows before/after for --row (default: 5)")
-    parser.add_argument("--raw", action="store_true", help="Display raw CSV lines instead of formatted output")
+    parser.add_argument(
+        "--raw",
+        action="store_true",
+        help=(
+            "Display raw CSV lines instead of formatted output "
+            "or search for raw string in --find"
+        ),
+    )
+    parser.add_argument("--compare", type=str, metavar="SECOND_FILE", help="Compare the main file to a second CSV file")
+    parser.add_argument("--find", type=str, help="Find rows matching column values (JSON string or raw string)")
 
     args = parser.parse_args()
 
@@ -138,7 +236,11 @@ def main():
     print("Runtime Configuration:")
     print(f"  File: {args.file}")
 
-    if args.row:
+    if args.compare:
+        print(f"  Mode: Compare ({args.file} vs {args.compare})")
+    elif args.find:
+        print(f"  Mode: Find ({args.find})")
+    elif args.row:
         print(f"  Mode: Row ({args.row} ± {args.context} records)")
     elif args.top:
         print(f"  Mode: Top ({args.top} records)")
@@ -151,7 +253,16 @@ def main():
 
     start = time.time()
 
-    if args.row:
+    if args.compare:
+        compare_csv_files(args.file, args.compare)
+    elif args.find:
+        try:
+            column_values = json.loads(args.find)
+            find_rows_by_column_values(args.file, column_values, raw=args.raw)
+        except Exception:
+            # If not JSON, treat as raw string search
+            find_rows_by_column_values(args.file, args.find, raw=True)
+    elif args.row:
         show_row_with_context(args.file, args.row, context=args.context, raw=args.raw)
     elif args.top:
         show_records(args.file, args.top, tail=False, raw=args.raw)
