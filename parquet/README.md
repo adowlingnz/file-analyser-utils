@@ -30,35 +30,18 @@ python parquet_analyser.py <file> [options]
 
 ### Options
 
-- `--analyse`  
-  Perform field count and schema analysis.
-
-- `--top N`  
-  Show the first N records.
-
-- `--tail N`  
-  Show the last N records.
-
-- `--row N`  
-  Show row N and N rows before/after (see `--context`).
-
-- `--context N`  
-  Number of rows before/after for `--row` (default: 5).
-
-- `--print-malformed-rows`  
-  Print row numbers of malformed rows (rows with unexpected field counts).
-
-- `--print-malformed-data`  
-  Print actual data of malformed rows.
-
-- `--check-duplicates N`  
-  Check for duplicate rows based on the first N columns.
-
-- `--find '{"col1": value1, "col2": value2, ...}'`  
-  Find and print rows matching the specified column values (pass as a JSON string).
-
-- `--compare SECOND_FILE`  
-  Compare the main file to a second Parquet file for schema and data equality.
+| Option                   | Description                                                                                      |
+|--------------------------|--------------------------------------------------------------------------------------------------|
+| `--analyse`              | Perform field count and schema analysis.                                                         |
+| `--top N`                | Show the first N records.                                                                       |
+| `--tail N`               | Show the last N records.                                                                        |
+| `--row N`                | Show row N and N rows before/after (see `--context`).                                           |
+| `--context N`            | Number of rows before/after for `--row` (default: 5).                                           |
+| `--print-malformed-rows` | Print row numbers of malformed rows (rows with unexpected field counts).                         |
+| `--print-malformed-data` | Print actual data of malformed rows.                                                            |
+| `--check-duplicates N`   | Check for duplicate rows based on the first N columns.                                           |
+| `--find '{...}'`         | Find and print rows matching the specified column values (pass as a JSON string).                |
+| `--compare SECOND_FILE`  | Compare the main file to a second Parquet file for schema and data equality.                     |
 
 ### Examples
 
