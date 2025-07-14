@@ -132,7 +132,8 @@ def analyse_parquet(file_path, print_malformed_rows=False, print_malformed_data=
         if duplicates:
             print(f"\nDuplicate rows found based on first {check_duplicates} columns:")
             for key, rows in duplicates.items():
-                print(f"  Key {key}: rows {', '.join(str(r) for r in rows)}")
+                formatted_rows = ', '.join(f"{r:,}" for r in rows)
+                print(f"  Key {key}: rows {formatted_rows}")
         else:
             print(f"\nNo duplicate rows found based on first {check_duplicates} columns.")
 
